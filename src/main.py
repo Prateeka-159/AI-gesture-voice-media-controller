@@ -8,6 +8,10 @@ import threading
 import time
 
 pyautogui.FAILSAFE = True
+prev_pinch_distance = 0
+pinch_threshold = 15
+zoom_cooldown = 0.7
+last_zoom_time = time.time()
 
 # voice recognition
 def voice_control():
@@ -76,6 +80,32 @@ while True:
                         pyautogui.scroll(200)
                         direction = "UP"
                 last_action_time = current_time
+                
+        # pinch detection for zoom
+        thumb = hand[4]     # thumb tip
+        index_finger = hand[8]  # index tip
+        tx, ty = int(thumb.x * w), int(thumb.y * h)
+        ix, iy = int(index_finger.x * w), int(index_finger.y * h)
+
+        # draw fingertips
+        cv2.circle(frame, (tx, ty), 8, (255,0,0), -1)
+        cv2.circle(frame, (ix, iy), 8, (255,0,0), -1)
+        pinch_distance = ((tx - ix)**2 + (ty - iy)**2) ** 0.5
+        current_time = time.time()
+
+        if prev_pinch_distance != 0:
+            diff = pinch_distance - prev_pinch_distance
+            if abs(diff) > pinch_threshold and current_time - last_zoom_time > zoom_cooldown:
+                if diff > 0:
+                    pyautogui.hotkey("ctrl", "+")
+                    print("Zoom In 🔍")
+                else:
+                    pyautogui.hotkey("ctrl", "-")
+                    print("Zoom Out 🔎")
+
+                last_zoom_time = current_time
+        prev_pinch_distance = pinch_distance
+
         cv2.putText(frame, direction, (30,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
         prev_x, prev_y = x, y
     cv2.imshow("Gesture + Voice Controller", frame)
