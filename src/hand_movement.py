@@ -2,6 +2,15 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+import pyautogui
+import time
+
+prev_x, prev_y = 0, 0
+movement_threshold = 20
+last_action_time = time.time()
+cooldown = 0.4 
+pyautogui.FAILSAFE = True
+
 base_option = python.BaseOptions(model_asset_path="hand_landmarker.task")
 options = vision.HandLandmarkerOptions(
     base_options=base_option,
@@ -26,18 +35,28 @@ while True:
         cv2.circle(frame, (x,y), 10, (0, 255, 0), -1)
         dx = x-prev_x
         dy = y-prev_y
-        direction = ""
-        if abs(dx) > movement_threshold:
-            if dx>0:
-                direction = "RIGHT"
-            else:
-                direction = "LEFT"
-        if abs(dy) > movement_threshold:
-            if dy>0:
-                direction = "DOWN"
-            else:
-                direction = "UP"
-        cv2.putText(frame, direction, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        current_time = time.time()
+
+        if abs(dx) > movement_threshold or abs(dy) > movement_threshold:
+            if current_time - last_action_time > cooldown:
+                if abs(dx) > abs(dy):
+                    # Horizontal movement
+                    if dx > 0:
+                        direction = "RIGHT →"
+                        pyautogui.hscroll(-200)
+                    else:
+                        direction = "LEFT ←"
+                        pyautogui.hscroll(200)
+                else:
+                    # Vertical movement
+                    if dy > 0:
+                        direction = "DOWN ↓"
+                        pyautogui.scroll(-200)
+                    else:
+                        direction = "UP ↑"
+                        pyautogui.scroll(200)
+                last_action_time = current_time
+        cv2.putText(frame, direction, (30,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
         prev_x, prev_y = x, y
     cv2.imshow("Hand movement detection", frame)
     if cv2.waitKey(1) & 0xFF==27:
