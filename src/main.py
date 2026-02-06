@@ -5,12 +5,12 @@ from mediapipe.tasks.python import vision
 import pyautogui
 import speech_recognition as sr
 import threading
-import time
 
 pyautogui.FAILSAFE = True
 
 # ---------------- VOICE CONTROL ----------------
 def voice_control():
+    import speech_recognition as sr
     r = sr.Recognizer()
     mic = sr.Microphone()
     while True:
@@ -26,25 +26,22 @@ def voice_control():
 
 threading.Thread(target=voice_control, daemon=True).start()
 
-# ---------------- MEDIAPIPE HAND MODEL ----------------
+# ---------------- HAND MODEL ----------------
 base_options = python.BaseOptions(model_asset_path="hand_landmarker.task")
 options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=1)
 landmarker = vision.HandLandmarker.create_from_options(options)
 
 cap = cv2.VideoCapture(0)
 
-prev_y = 0
-scroll_speed = 40
+last_scroll_amount = 0
+scroll_active = False
 
-# ---------- Robust fist detection ----------
-def is_fist(hand, h):
+# ---------- Reliable fist detection ----------
+def is_fist(hand):
     fingertip_ids = [8,12,16,20]
     knuckle_ids   = [6,10,14,18]
-
     tip_avg = sum([hand[i].y for i in fingertip_ids]) / 4
     knuckle_avg = sum([hand[i].y for i in knuckle_ids]) / 4
-
-    # fingertips lower than knuckles → fist
     return tip_avg > knuckle_avg
 
 while True:
@@ -59,7 +56,7 @@ while True:
         hand = result.hand_landmarks[0]
         h, w, _ = frame.shape
 
-        # draw all landmarks
+        # draw landmarks
         for lm in hand:
             px = int(lm.x * w)
             py = int(lm.y * h)
@@ -68,28 +65,37 @@ while True:
         wrist = hand[0]
         y = int(wrist.y * h)
 
-        if is_fist(hand, h):
-            dy = y - prev_y
+        center_y = h // 2
+        distance = center_y - y
 
-            if dy < -4:
-                pyautogui.scroll(scroll_speed)
-                cv2.putText(frame,"FIST SCROLL UP",(30,50),
-                            cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0),2)
+        if is_fist(hand):
+            scroll_active = True
 
-            elif dy > 4:
-                pyautogui.scroll(-scroll_speed)
-                cv2.putText(frame,"FIST SCROLL DOWN",(30,50),
-                            cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0),2)
+            # dead zone
+            if abs(distance) < 20:
+                last_scroll_amount = 0
+            else:
+                speed = int((distance ** 2) * 0.002)
+                last_scroll_amount = speed if distance > 0 else -speed
+
+            cv2.putText(frame,"AUTO SCROLL ACTIVE",(30,50),
+                        cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0),2)
+
         else:
+            scroll_active = False
+            last_scroll_amount = 0
             cv2.putText(frame,"OPEN HAND = STOP",(30,50),
                         cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),2)
 
-        prev_y = y
+    # ---- Continue scrolling even if hand leaves frame ----
+    if scroll_active and last_scroll_amount != 0:
+        pyautogui.scroll(last_scroll_amount)
 
-    cv2.imshow("Fist Scroll + Voice Control", frame)
+    cv2.imshow("Auto Scroll + Voice", frame)
 
     if cv2.waitKey(1) & 0xFF == 27:
         break
 
 cap.release()
 cv2.destroyAllWindows()
+
